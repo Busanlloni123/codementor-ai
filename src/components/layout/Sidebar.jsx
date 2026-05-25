@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "../../services/supabase";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
-import { getConversations, createConversation } from "../../services/conversationService";
+import { getConversations, createConversation, deleteConversation } from "../../services/conversationService";
 
 function Logo() {
   return (
@@ -54,6 +54,19 @@ export default function Sidebar() {
       navigate(`/chat/${conversation.id}`);
     } catch (error) {
       console.error("Error creando conversacion:", error);
+    }
+  }
+
+  async function handleDeleteConversation(id) {
+    if (!confirm("¿Seguro que quieres borrar esta conversacion?")) return;
+    try {
+      await deleteConversation(id);
+      setConversations((prev) => prev.filter((c) => c.id !== id));
+      if (conversationId === id) {
+        navigate("/chat");
+      }
+    } catch (error) {
+      console.error("Error borrando conversacion:", error);
     }
   }
 
@@ -128,10 +141,11 @@ export default function Sidebar() {
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -10 }}
                   transition={{ duration: 0.2, delay: index * 0.03 }}
+                  className="group relative"
                 >
                   <Link
                     to={`/chat/${conv.id}`}
-                    className={`block px-3 py-2 rounded-lg text-sm truncate transition-colors ${
+                    className={`block px-3 py-2 rounded-lg text-sm truncate transition-colors pr-8 ${
                       conversationId === conv.id
                         ? "bg-primary-600/20 text-primary-400"
                         : theme === "dark"
@@ -141,6 +155,18 @@ export default function Sidebar() {
                   >
                     {conv.title}
                   </Link>
+                  <button
+                    onClick={() => handleDeleteConversation(conv.id)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-slate-500 hover:text-red-400"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6l-1 14H6L5 6" />
+                      <path d="M10 11v6" />
+                      <path d="M14 11v6" />
+                      <path d="M9 6V4h6v2" />
+                    </svg>
+                  </button>
                 </motion.div>
               ))}
             </AnimatePresence>
