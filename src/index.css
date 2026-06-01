@@ -3,10 +3,9 @@
 @tailwind utilities;
 
 @layer base {
-  html, body, #root {
-    @apply h-full overflow-hidden;
-  }
-
+ html, body, #root {
+  @apply h-full;
+}
   body {
     @apply font-sans transition-colors duration-300;
   }
