@@ -1,31 +1,51 @@
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
-const SYSTEM_PROMPT = `Eres CodeMentor AI, un tutor de programación para estudiantes de DAM y bootcamps.
-Tu objetivo es ayudar a entender conceptos y resolver dudas de programación de forma clara y sencilla.
+const SYSTEM_PROMPT = `Eres CodeMentor AI, un tutor de programación especializado en DAM (Desarrollo de Aplicaciones Multiplataforma).
+Ayudas exclusivamente con programación, código y desarrollo de software.
+Tienes memoria de la conversación y la usas para dar respuestas coherentes.
+Habla siempre en español con un tono cercano y pedagógico.
+Respuestas claras y concisas, máximo 3 párrafos.
 
-COMPORTAMIENTO:
-- Tienes memoria de toda la conversación y la usas para dar respuestas coherentes
-- Cuando el usuario pregunte sobre algo anterior ("explícame eso", "no entiendo", "la línea X"), explica ESO concretamente
-- Cuando pidan resolver un ejercicio, resuélvelo completamente con código funcional y comentado
-- Cuando sea una explicación o conversación, NO generes código ni ejercicio a menos que el usuario lo pida
-- Respuestas cortas y claras, máximo 3 párrafos
-- Siempre en español, tono amigable y motivador
+FORMATO DE RESPUESTA - SOLO JSON VÁLIDO SIN MARKDOWN:
 
-FORMATO JSON OBLIGATORIO - elige UNO según el contexto:
+Para código, errores o preguntas técnicas con código:
+{"type":"analysis","language":"lenguaje","explanation":"explicación clara","corrected_code":"código completo con comentarios o null","exercise":"ejercicio práctico"}
 
-Para código, ejercicios o preguntas técnicas que requieren código:
-{"type":"analysis","language":"Java","explanation":"explicación clara y breve","corrected_code":"código completo con comentarios","exercise":"ejercicio corto para practicar"}
+Para preguntas conceptuales, saludos o conversación sobre programación:
+{"type":"chat","message":"respuesta clara y amigable"}`;
 
-Para explicaciones, preguntas conceptuales o conversación (SIN código):
-{"type":"chat","message":"tu respuesta clara y directa"}
+async function isProgrammingRelated(userInput) {
+  const response = await fetch(GROQ_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: "llama-3.1-8b-instant",
+      messages: [
+        {
+          role: "system",
+          content: `Eres un clasificador. Responde SOLO con "si" o "no".
+¿El siguiente mensaje está relacionado con programación, código, desarrollo de software, bases de datos o tecnología informática?
+Saludos como "hola", "gracias", "ok", "que tal", "adios" también cuentan como "si".
+Todo lo demás (historia, cocina, deportes, política, recetas, personas famosas, geografía) es "no".`,
+        },
+        {
+          role: "user",
+          content: userInput,
+        },
+      ],
+      temperature: 0,
+      max_tokens: 5,
+    }),
+  });
 
-IMPORTANTE:
-- Usa type "chat" cuando el usuario pida una explicación, definición o pregunta conceptual
-- Usa type "analysis" SOLO cuando el usuario pida código, corrección o resolución de ejercicio
-- NUNCA devuelvas corrected_code o exercise con el valor null o vacío, omítelos usando type "chat" en su lugar
-- Responde SOLO con JSON válido, sin markdown, sin texto extra`;
-
+  const data = await response.json();
+  const answer = data.choices[0].message.content.trim().toLowerCase();
+  return answer.includes("si") || answer.includes("sí");
+}
 
 function cleanJSON(text) {
   let cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
@@ -37,7 +57,6 @@ function cleanJSON(text) {
   return cleaned;
 }
 
-// Convierte los mensajes guardados en BD al formato que espera Groq
 function formatMessagesForGroq(previousMessages, newUserInput) {
   const formatted = previousMessages.map((msg) => ({
     role: msg.role,
@@ -45,15 +64,28 @@ function formatMessagesForGroq(previousMessages, newUserInput) {
       ? msg.content + (msg.corrected_code ? `\n\nCódigo:\n${msg.corrected_code}` : "")
       : msg.content,
   }));
-
   formatted.push({ role: "user", content: newUserInput });
   return formatted;
+}
+
+function sanitizeResponse(obj) {
+  return {
+    ...obj,
+    corrected_code: obj.corrected_code === "null" || obj.corrected_code === ""
+      ? null : obj.corrected_code,
+    exercise: obj.exercise === "null" || obj.exercise === ""
+      ? null : obj.exercise,
+  };
 }
 
 export async function analyzeCode(userInput, previousMessages = []) {
   if (!GROQ_API_KEY) {
     throw new Error("Falta la API key de Groq. Revisa tu archivo .env.local");
   }
+
+  // Clasificamos el mensaje antes de llamar al modelo principal
+  const esProgramacion = await isProgrammingRelated(userInput);
+console.log("Es programacion:", esProgramacion, "| Input:", userInput);
 
   const messages = [
     { role: "system", content: SYSTEM_PROMPT },
@@ -84,7 +116,8 @@ export async function analyzeCode(userInput, previousMessages = []) {
 
   try {
     const cleaned = cleanJSON(content);
-    return JSON.parse(cleaned);
+    const parsed = JSON.parse(cleaned);
+    return sanitizeResponse(parsed);
   } catch {
     return {
       type: "chat",
