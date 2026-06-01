@@ -1,50 +1,89 @@
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
-const SYSTEM_PROMPT = `Eres CodeMentor AI, un tutor de programación especializado en DAM (Desarrollo de Aplicaciones Multiplataforma).
-Ayudas exclusivamente con programación, código y desarrollo de software.
-Tienes memoria de la conversación y la usas para dar respuestas coherentes.
-Habla siempre en español con un tono cercano y pedagógico.
-Respuestas claras y concisas, máximo 3 párrafos.
+const SYSTEM_PROMPT = `Eres CodeMentor AI, un tutor de programación especializado en DAM.
+Tu única función es ayudar con programación y desarrollo de software.
 
-FORMATO DE RESPUESTA - SOLO JSON VÁLIDO SIN MARKDOWN:
+RESPONDE SOLO A:
+- Código, errores, bugs
+- Lenguajes: Java, Kotlin, JavaScript, Python, SQL, HTML, CSS, XML
+- Conceptos de programación, algoritmos, estructuras de datos
+- Frameworks, librerías, herramientas de desarrollo
+- Bases de datos, consultas SQL
+- Preguntas sobre DAM
 
-Para código, errores o preguntas técnicas con código:
-{"type":"analysis","language":"lenguaje","explanation":"explicación clara","corrected_code":"código completo con comentarios o null","exercise":"ejercicio práctico"}
+SI TE PREGUNTAN CUALQUIER OTRA COSA responde exactamente con este JSON:
+{"type":"chat","message":"Solo puedo ayudarte con programación y desarrollo de software. ¿Tienes alguna duda sobre código?"}
 
-Para preguntas conceptuales, saludos o conversación sobre programación:
-{"type":"chat","message":"respuesta clara y amigable"}`;
+FORMATO JSON SIN MARKDOWN:
+Para código o preguntas técnicas:
+{"type":"analysis","language":"lenguaje","explanation":"explicación","corrected_code":"código o null","exercise":"ejercicio"}
 
-async function isProgrammingRelated(userInput) {
-  const response = await fetch(GROQ_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${GROQ_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: "llama-3.1-8b-instant",
-      messages: [
-        {
-          role: "system",
-          content: `Eres un clasificador. Responde SOLO con "si" o "no".
-¿El siguiente mensaje está relacionado con programación, código, desarrollo de software, bases de datos o tecnología informática?
-Saludos como "hola", "gracias", "ok", "que tal", "adios" también cuentan como "si".
-Todo lo demás (historia, cocina, deportes, política, recetas, personas famosas, geografía) es "no".`,
-        },
-        {
-          role: "user",
-          content: userInput,
-        },
-      ],
-      temperature: 0,
-      max_tokens: 5,
-    }),
-  });
+Para conceptos de programación o saludos:
+{"type":"chat","message":"respuesta"}`;
 
-  const data = await response.json();
-  const answer = data.choices[0].message.content.trim().toLowerCase();
-  return answer.includes("si") || answer.includes("sí");
+// Lista blanca de temas permitidos
+const ALLOWED_TOPICS = [
+  "codigo", "código", "error", "bug", "excepcion", "excepción", "warning",
+  "funcion", "función", "método", "metodo", "clase", "objeto", "instancia",
+  "variable", "constante", "array", "lista", "mapa", "hashmap", "arraylist",
+  "bucle", "loop", "for", "while", "if", "else", "switch", "case",
+  "java", "kotlin", "javascript", "python", "sql", "html", "css", "xml",
+  "react", "android", "spring", "maven", "gradle", "node", "typescript",
+  "base de datos", "database", "tabla", "consulta", "query", "select",
+  "insert", "update", "delete", "join", "index", "clave primaria",
+  "algoritmo", "estructura de datos", "recursion", "recursividad",
+  "herencia", "polimorfismo", "encapsulamiento", "abstraccion", "interfaz",
+  "poo", "orientado a objetos", "programacion", "programación", "desarrollar",
+  "compilar", "ejecutar", "depurar", "debug", "ide", "editor",
+  "git", "github", "commit", "branch", "merge", "api", "rest", "json",
+  "http", "request", "response", "servidor", "cliente", "frontend", "backend",
+  "dam", "desarrollo de aplicaciones", "multiplataforma",
+  "null", "void", "return", "import", "package", "extends", "implements",
+  "public", "private", "protected", "static", "final", "abstract",
+  "try", "catch", "throw", "throws", "finally",
+  "string", "int", "float", "double", "boolean", "char", "long",
+  "terminal", "consola", "comando", "linux", "windows",
+  "explicame", "explica", "como se hace", "como hago", "que es",
+  "diferencia entre", "cuando usar", "para que sirve",
+];
+
+// Lista negra de temas prohibidos
+const BLOCKED_TOPICS = [
+  "receta", "cocina", "comida", "ingrediente", "hornear", "cocinar",
+  "guerra", "historia", "politica", "presidente", "gobierno", "rey", "reina",
+  "futbol", "deporte", "jugador", "equipo", "liga", "champions",
+  "pelicula", "serie", "musica", "cancion", "artista", "actor", "actriz",
+  "tiempo", "clima", "temperatura", "grados", "lluvia",
+  "pais", "ciudad", "capital", "geografia", "continente",
+  "matematicas", "fisica", "quimica", "biologia",
+  "filosofia", "religion", "dios", "iglesia",
+  "economia", "finanzas", "bolsa", "dinero", "precio",
+  "medicina", "enfermedad", "sintoma", "doctor",
+  "animal", "planta", "naturaleza",
+];
+
+function classifyMessage(text) {
+  const lower = text.toLowerCase();
+
+  // Saludos básicos siempre permitidos
+  const basicGreetings = ["hola", "gracias", "ok", "vale", "adios", "hasta luego", "de nada", "perfecto", "entendido"];
+  if (basicGreetings.some((g) => lower.trim() === g || lower.trim() === g + "!" || lower.trim() === g + ".")) {
+    return true;
+  }
+
+  // Si contiene algún tema bloqueado, rechazar directamente
+  if (BLOCKED_TOPICS.some((topic) => lower.includes(topic))) {
+    return false;
+  }
+
+  // Si contiene algún tema permitido, aceptar
+  if (ALLOWED_TOPICS.some((topic) => lower.includes(topic))) {
+    return true;
+  }
+
+  // Si no está en ninguna lista, rechazar por defecto
+  return false;
 }
 
 function cleanJSON(text) {
@@ -83,9 +122,13 @@ export async function analyzeCode(userInput, previousMessages = []) {
     throw new Error("Falta la API key de Groq. Revisa tu archivo .env.local");
   }
 
-  // Clasificamos el mensaje antes de llamar al modelo principal
-  const esProgramacion = await isProgrammingRelated(userInput);
-console.log("Es programacion:", esProgramacion, "| Input:", userInput);
+  // Clasificamos el mensaje localmente sin llamar a la API
+  if (!classifyMessage(userInput)) {
+    return {
+      type: "chat",
+      message: "Solo puedo ayudarte con programación y desarrollo de software. ¿Tienes alguna duda sobre código, errores o conceptos de programación?",
+    };
+  }
 
   const messages = [
     { role: "system", content: SYSTEM_PROMPT },
