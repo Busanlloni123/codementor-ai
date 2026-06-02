@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { analyzeCode } from "../services/groqService";
 import { motion, AnimatePresence } from "framer-motion";
+import { getDailyUsage, incrementUsage, canSendMessage } from "../services/usageService";
 import {
   getMessages,
   saveMessage,
@@ -208,6 +209,7 @@ export default function Chat() {
   const [loading, setLoading] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [error, setError] = useState(null);
+  const [usage, setUsage] = useState({ count: 0, limit: 30, remaining: 30 });
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -219,8 +221,21 @@ export default function Chat() {
   }, [conversationId]);
 
   useEffect(() => {
+    loadUsage();
+  }, []);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  async function loadUsage() {
+    try {
+      const data = await getDailyUsage();
+      setUsage(data);
+    } catch (error) {
+      console.error("Error cargando uso:", error);
+    }
+  }
 
   async function loadMessages() {
     setLoadingMessages(true);
@@ -236,6 +251,12 @@ export default function Chat() {
 
   async function handleSend() {
     if (!input.trim() || loading) return;
+
+    const puedeEnviar = await canSendMessage();
+    if (!puedeEnviar) {
+      setError("Has alcanzado el limite de 30 mensajes diarios. Vuelve manana o actualiza a Pro.");
+      return;
+    }
 
     const userInput = input.trim();
     setInput("");
@@ -259,6 +280,14 @@ export default function Chat() {
       });
 
       setMessages((prev) => [...prev, userMessage]);
+
+      // Incrementamos el contador de mensajes
+      const newCount = await incrementUsage();
+      setUsage((prev) => ({
+        ...prev,
+        count: newCount,
+        remaining: Math.max(0, prev.limit - newCount),
+      }));
 
       const prompt = language !== "Auto-detectar"
         ? `Lenguaje: ${language}\n\n${userInput}`
@@ -449,11 +478,22 @@ export default function Chat() {
               </motion.button>
             </div>
           </div>
-          <p className={`text-xs text-center mt-2 ${
-            theme === "dark" ? "text-slate-600" : "text-slate-400"
-          }`}>
-            Enter para enviar, Shift+Enter para nueva linea
-          </p>
+          <div className="flex items-center justify-between mt-2">
+            <p className={`text-xs ${
+              usage.remaining <= 5
+                ? "text-red-400"
+                : usage.remaining <= 10
+                  ? "text-yellow-400"
+                  : theme === "dark" ? "text-slate-600" : "text-slate-400"
+            }`}>
+              {usage.remaining} / {usage.limit} mensajes restantes hoy
+            </p>
+            <p className={`text-xs ${
+              theme === "dark" ? "text-slate-600" : "text-slate-400"
+            }`}>
+              Enter para enviar, Shift+Enter para nueva linea
+            </p>
+          </div>
         </div>
       </motion.div>
     </div>
