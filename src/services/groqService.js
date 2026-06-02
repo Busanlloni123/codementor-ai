@@ -1,100 +1,35 @@
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
-const SYSTEM_PROMPT = `Eres CodeMentor AI, un tutor de programación especializado en DAM.
-Tu única función es ayudar con programación y desarrollo de software.
+const SYSTEM_PROMPT = `Eres CodeMentor AI, un tutor de programación especializado en DAM (Desarrollo de Aplicaciones Multiplataforma).
+Ayudas exclusivamente con programación, código y desarrollo de software.
+Tienes memoria de la conversación y la usas para dar respuestas coherentes.
+Habla siempre en español con un tono cercano y pedagógico.
+Respuestas claras y concisas, máximo 3 párrafos.
 
-RESPONDE SOLO A:
-- Código, errores, bugs
-- Lenguajes: Java, Kotlin, JavaScript, Python, SQL, HTML, CSS, XML
-- Conceptos de programación, algoritmos, estructuras de datos
-- Frameworks, librerías, herramientas de desarrollo
-- Bases de datos, consultas SQL
-- Preguntas sobre DAM
+FORMATO DE RESPUESTA - SOLO JSON VÁLIDO SIN MARKDOWN:
 
-SI TE PREGUNTAN CUALQUIER OTRA COSA responde exactamente con este JSON:
-{"type":"chat","message":"Solo puedo ayudarte con programación y desarrollo de software. ¿Tienes alguna duda sobre código?"}
+Para código, errores o preguntas técnicas con código:
+{"type":"analysis","language":"lenguaje","explanation":"explicación clara","corrected_code":"código completo con comentarios o null","exercise":"ejercicio práctico"}
 
-FORMATO JSON SIN MARKDOWN:
-Para código o preguntas técnicas:
-{"type":"analysis","language":"lenguaje","explanation":"explicación","corrected_code":"código o null","exercise":"ejercicio"}
+Para preguntas conceptuales, saludos o conversación sobre programación:
+{"type":"chat","message":"respuesta clara y amigable"}
 
-Para conceptos de programación o saludos:
-{"type":"chat","message":"respuesta"}`;
-
-const ALLOWED_TOPICS = [
-  "codigo", "código", "error", "bug", "excepcion", "excepción", "warning",
-  "funcion", "función", "método", "metodo", "clase", "objeto", "instancia",
-  "variable", "constante", "array", "lista", "mapa", "hashmap", "arraylist",
-  "bucle", "loop", "for", "while", "if", "else", "switch", "case",
-  "java", "kotlin", "javascript", "python", "sql", "html", "css", "xml",
-  "react", "android", "spring", "maven", "gradle", "node", "typescript",
-  "base de datos", "database", "tabla", "consulta", "query", "select",
-  "insert", "update", "delete", "join", "index", "clave primaria",
-  "algoritmo", "estructura de datos", "recursion", "recursividad",
-  "herencia", "polimorfismo", "encapsulamiento", "abstraccion", "interfaz",
-  "poo", "orientado a objetos", "programacion", "programación", "desarrollar",
-  "compilar", "ejecutar", "depurar", "debug", "ide", "editor",
-  "git", "github", "commit", "branch", "merge", "api", "rest", "json",
-  "http", "request", "response", "servidor", "cliente", "frontend", "backend",
-  "dam", "desarrollo de aplicaciones", "multiplataforma",
-  "null", "void", "return", "import", "package", "extends", "implements",
-  "public", "private", "protected", "static", "final", "abstract",
-  "try", "catch", "throw", "throws", "finally",
-  "string", "int", "float", "double", "boolean", "char", "long",
-  "terminal", "consola", "comando", "linux", "windows",
-  "explicame", "explica", "como se hace", "como hago", "que es",
-  "diferencia entre", "cuando usar", "para que sirve", "resuelvelo",
-  "resuelve", "hazlo", "implementa", "escribe", "crea", "ejercicio",
-  "practica", "ejemplo", "muestra", "enséñame", "ensenme",
-];
+Si te preguntan algo que no es programación responde:
+{"type":"chat","message":"Solo puedo ayudarte con programación y desarrollo de software. ¿Tienes alguna duda sobre código?"}`;
 
 const BLOCKED_TOPICS = [
   "receta", "cocina", "comida", "ingrediente", "hornear", "cocinar",
-  "guerra", "historia", "politica", "presidente", "gobierno", "rey", "reina",
-  "futbol", "deporte", "jugador", "equipo", "liga", "champions",
-  "pelicula", "serie", "musica", "cancion", "artista", "actor", "actriz",
-  "tiempo", "clima", "temperatura", "grados", "lluvia",
-  "pais", "ciudad", "capital", "geografia", "continente",
-  "filosofia", "religion", "dios", "iglesia",
-  "economia", "finanzas", "bolsa", "dinero", "precio",
-  "medicina", "enfermedad", "sintoma", "doctor",
-  "animal", "planta", "naturaleza",
+  "guerra mundial", "historia de", "politica", "presidente de",
+  "quien es messi", "quien es ronaldo", "quien es trump", "quien es",
+  "futbol", "deporte", "jugador de", "pelicula", "serie de tv",
+  "cancion de", "artista musical", "tiempo meteorologico", "clima de",
+  "capital de", "geografia", "medicina", "enfermedad",
 ];
 
-function classifyMessage(text, previousMessages = []) {
-  const lower = text.toLowerCase().trim();
-
-  // Saludos básicos siempre permitidos
-  const basicGreetings = ["hola", "gracias", "ok", "vale", "adios", "hasta luego", "de nada", "perfecto", "entendido", "genial", "bien"];
-  if (basicGreetings.some((g) => lower === g || lower === g + "!" || lower === g + ".")) {
-    return true;
-  }
-
-  // Si hay conversación previa sobre programación, permitir mensajes de seguimiento
-  if (previousMessages.length > 0) {
-    const lastAssistantMsg = [...previousMessages].reverse().find((m) => m.role === "assistant");
-    if (lastAssistantMsg) {
-      const lastContent = (lastAssistantMsg.content || "").toLowerCase();
-      const hasProgrammingContext = ALLOWED_TOPICS.some((topic) => lastContent.includes(topic));
-      if (hasProgrammingContext) {
-        if (lower.length <= 50) return true;
-      }
-    }
-  }
-
-  // Si contiene algún tema bloqueado, rechazar
-  if (BLOCKED_TOPICS.some((topic) => lower.includes(topic))) {
-    return false;
-  }
-
-  // Si contiene algún tema permitido, aceptar
-  if (ALLOWED_TOPICS.some((topic) => lower.includes(topic))) {
-    return true;
-  }
-
-  // Por defecto rechazar
-  return false;
+function isBlocked(text) {
+  const lower = text.toLowerCase();
+  return BLOCKED_TOPICS.some((topic) => lower.includes(topic));
 }
 
 function cleanJSON(text) {
@@ -108,7 +43,9 @@ function cleanJSON(text) {
 }
 
 function formatMessagesForGroq(previousMessages, newUserInput) {
-  const formatted = previousMessages.map((msg) => ({
+  // Solo mandamos los últimos 6 mensajes para no sobrecargar el contexto
+  const recentMessages = previousMessages.slice(-6);
+  const formatted = recentMessages.map((msg) => ({
     role: msg.role,
     content: msg.role === "assistant"
       ? msg.content + (msg.corrected_code ? `\n\nCódigo:\n${msg.corrected_code}` : "")
@@ -133,7 +70,8 @@ export async function analyzeCode(userInput, previousMessages = []) {
     throw new Error("Falta la API key de Groq. Revisa tu archivo .env.local");
   }
 
-  if (!classifyMessage(userInput, previousMessages)) {
+  // Filtro simple y directo
+  if (isBlocked(userInput)) {
     return {
       type: "chat",
       message: "Solo puedo ayudarte con programación y desarrollo de software. ¿Tienes alguna duda sobre código, errores o conceptos de programación?",
