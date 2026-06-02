@@ -22,7 +22,6 @@ Para código o preguntas técnicas:
 Para conceptos de programación o saludos:
 {"type":"chat","message":"respuesta"}`;
 
-// Lista blanca de temas permitidos
 const ALLOWED_TOPICS = [
   "codigo", "código", "error", "bug", "excepcion", "excepción", "warning",
   "funcion", "función", "método", "metodo", "clase", "objeto", "instancia",
@@ -45,10 +44,11 @@ const ALLOWED_TOPICS = [
   "string", "int", "float", "double", "boolean", "char", "long",
   "terminal", "consola", "comando", "linux", "windows",
   "explicame", "explica", "como se hace", "como hago", "que es",
-  "diferencia entre", "cuando usar", "para que sirve",
+  "diferencia entre", "cuando usar", "para que sirve", "resuelvelo",
+  "resuelve", "hazlo", "implementa", "escribe", "crea", "ejercicio",
+  "practica", "ejemplo", "muestra", "enséñame", "ensenme",
 ];
 
-// Lista negra de temas prohibidos
 const BLOCKED_TOPICS = [
   "receta", "cocina", "comida", "ingrediente", "hornear", "cocinar",
   "guerra", "historia", "politica", "presidente", "gobierno", "rey", "reina",
@@ -56,23 +56,34 @@ const BLOCKED_TOPICS = [
   "pelicula", "serie", "musica", "cancion", "artista", "actor", "actriz",
   "tiempo", "clima", "temperatura", "grados", "lluvia",
   "pais", "ciudad", "capital", "geografia", "continente",
-  "matematicas", "fisica", "quimica", "biologia",
   "filosofia", "religion", "dios", "iglesia",
   "economia", "finanzas", "bolsa", "dinero", "precio",
   "medicina", "enfermedad", "sintoma", "doctor",
   "animal", "planta", "naturaleza",
 ];
 
-function classifyMessage(text) {
-  const lower = text.toLowerCase();
+function classifyMessage(text, previousMessages = []) {
+  const lower = text.toLowerCase().trim();
 
   // Saludos básicos siempre permitidos
-  const basicGreetings = ["hola", "gracias", "ok", "vale", "adios", "hasta luego", "de nada", "perfecto", "entendido"];
-  if (basicGreetings.some((g) => lower.trim() === g || lower.trim() === g + "!" || lower.trim() === g + ".")) {
+  const basicGreetings = ["hola", "gracias", "ok", "vale", "adios", "hasta luego", "de nada", "perfecto", "entendido", "genial", "bien"];
+  if (basicGreetings.some((g) => lower === g || lower === g + "!" || lower === g + ".")) {
     return true;
   }
 
-  // Si contiene algún tema bloqueado, rechazar directamente
+  // Si hay conversación previa sobre programación, permitir mensajes de seguimiento
+  if (previousMessages.length > 0) {
+    const lastAssistantMsg = [...previousMessages].reverse().find((m) => m.role === "assistant");
+    if (lastAssistantMsg) {
+      const lastContent = (lastAssistantMsg.content || "").toLowerCase();
+      const hasProgrammingContext = ALLOWED_TOPICS.some((topic) => lastContent.includes(topic));
+      if (hasProgrammingContext) {
+        if (lower.length <= 50) return true;
+      }
+    }
+  }
+
+  // Si contiene algún tema bloqueado, rechazar
   if (BLOCKED_TOPICS.some((topic) => lower.includes(topic))) {
     return false;
   }
@@ -82,7 +93,7 @@ function classifyMessage(text) {
     return true;
   }
 
-  // Si no está en ninguna lista, rechazar por defecto
+  // Por defecto rechazar
   return false;
 }
 
@@ -122,8 +133,7 @@ export async function analyzeCode(userInput, previousMessages = []) {
     throw new Error("Falta la API key de Groq. Revisa tu archivo .env.local");
   }
 
-  // Clasificamos el mensaje localmente sin llamar a la API
-  if (!classifyMessage(userInput)) {
+  if (!classifyMessage(userInput, previousMessages)) {
     return {
       type: "chat",
       message: "Solo puedo ayudarte con programación y desarrollo de software. ¿Tienes alguna duda sobre código, errores o conceptos de programación?",
