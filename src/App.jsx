@@ -5,6 +5,7 @@ import Sidebar from "./components/layout/Sidebar";
 import Home from "./pages/Home";
 import Chat from "./pages/Chat";
 import Login from "./pages/Login";
+import Teacher from "./pages/Teacher";
 import LoadingSpinner from "./components/ui/LoadingSpinner";
 
 function ProtectedLayout({ children }) {
@@ -50,9 +51,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route
           path="/"
-          element={
-            user ? <Navigate to="/chat" replace /> : <Home />
-          }
+          element={user ? <Navigate to="/chat" replace /> : <Home />}
         />
         <Route
           path="/chat"
@@ -67,6 +66,14 @@ export default function App() {
           element={
             <ProtectedLayout>
               <Chat />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/teacher"
+          element={
+            <ProtectedLayout>
+              <Teacher />
             </ProtectedLayout>
           }
         />
